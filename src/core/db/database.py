@@ -1,19 +1,23 @@
-from typing import AsyncGenerator
+import logging
+from collections.abc import AsyncGenerator
 
+import redis.asyncio as aioredis
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from ..config.env import settings
+from src.core.config.env import env
+
+logger = logging.getLogger(__name__)
 
 engine = create_async_engine(
-    settings.DATABASE_URL,
-    echo=settings.DEBUG,
+    env.DATABASE_URL,
+    echo=env.DEBUG,
     pool_size=10,
     max_overflow=20,
     pool_pre_ping=True,
     pool_recycle=3600,
 )
 
-AsyncSessionLocal = async_sessionmaker(
+async_session_factory = async_sessionmaker(
     engine,
     class_=AsyncSession,
     expire_on_commit=False,
@@ -21,45 +25,49 @@ AsyncSessionLocal = async_sessionmaker(
     autoflush=False,
 )
 
+_redis_client: aioredis.Redis | None = None
 
-async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependency para obter uma sessão de banco de dados.
 
-    Uso em FastAPI:
-        @app.get("/users")
-        async def get_users(db: AsyncSession = Depends(get_db)):
-            ...
-
-    Yields:
-        AsyncSession: Sessão de banco de dados assíncrona
-    """
-    async with AsyncSessionLocal() as session:
+async def get_db() -> AsyncGenerator[AsyncSession]:
+    async with async_session_factory() as session:
         try:
             yield session
             await session.commit()
         except Exception:
             await session.rollback()
             raise
-        finally:
-            await session.close()
 
 
 async def init_db() -> None:
-    """
-    Inicializa o banco de dados criando todas as tabelas.
-    NOTA: Em produção, usar Alembic para migrações.
-    Esta função é útil apenas para desenvolvimento/testes.
-    """
-    from .models import Base
-
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(lambda c: None)
+    logger.info("Database engine connected successfully")
 
 
 async def close_db() -> None:
-    """
-    Fecha todas as conexões do pool de banco de dados.
-    Deve ser chamado no shutdown da aplicação.
-    """
     await engine.dispose()
+    logger.info("Database engine disposed")
+
+
+async def init_redis() -> None:
+    global _redis_client
+    _redis_client = aioredis.from_url(
+        env.REDIS_URL,
+        decode_responses=True,
+    )
+    await _redis_client.ping()
+    logger.info("Redis connected successfully")
+
+
+async def close_redis() -> None:
+    global _redis_client
+    if _redis_client is not None:
+        await _redis_client.aclose()
+        _redis_client = None
+        logger.info("Redis connection closed")
+
+
+def get_redis() -> aioredis.Redis:
+    if _redis_client is None:
+        raise RuntimeError("Redis client not initialized. Call init_redis() first.")
+    return _redis_client

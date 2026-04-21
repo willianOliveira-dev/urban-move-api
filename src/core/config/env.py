@@ -1,4 +1,4 @@
-from pydantic import Field, PostgresDsn
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -15,13 +15,10 @@ class Env(BaseSettings):
     DEBUG: bool = False
     ENVIRONMENT: str = "development"
 
-    DATABASE_URL: PostgresDsn = Field(...)
+    DATABASE_URL: str = Field(...)
 
     SUPABASE_URL: str = Field(...)
     SUPABASE_ANON_KEY: str = Field(...)
-    SUPABASE_SERVICE_KEY: str | None = None
-    JWT_SECRET: str = Field(...)
-    JWT_ALGORITHM: str = "HS256"
 
     REDIS_URL: str = "redis://localhost:6379/0"
 
@@ -31,6 +28,10 @@ class Env(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]
 
     LOG_LEVEL: str = "INFO"
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        return f"{self.SUPABASE_URL}/auth/v1/.well-known/jwks.json"
 
 
 env = Env()

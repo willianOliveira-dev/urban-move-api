@@ -7,20 +7,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from src.core.config.env import env
+from src.core.db.database import close_db, close_redis, init_db, init_redis
 from src.modules.mobility.router import router as mobility_router
 
 logging.basicConfig(
     level=getattr(logging, env.LOG_LEVEL.upper(), logging.INFO),
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
-logger = logging.getLogger("urbanmove")
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    logger.info("Iniciando UrbanMove API...")
+    logger.info("Starting database engine...")
+    await init_db()
+    logger.info("Starting Redis...")
+    await init_redis()
     yield
-    logger.info("Encerrando UrbanMove API...")
+    logger.info("Shutting down Redis...")
+    await close_redis()
+    logger.info("Shutting down database engine...")
+    await close_db()
 
 
 def create_app() -> FastAPI:
@@ -45,7 +52,6 @@ def create_app() -> FastAPI:
     async def health_check() -> dict[str, str]:
         return {
             "status": "healthy",
-            "app": env.APP_NAME,
             "version": env.APP_VERSION,
             "environment": env.ENVIRONMENT,
         }
