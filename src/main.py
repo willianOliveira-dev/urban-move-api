@@ -49,14 +49,13 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
 
 
 def create_app() -> FastAPI:
-    """Configura e instancia a aplicação FastAPI."""
     fastapi = FastAPI(
         title="UrbanMove API",
         description="""
         Backend de Mobilidade Urbana Inteligente para a cidade de São Paulo.
         
         ### Funcionalidades:
-        * **Planejamento de Rotas**: Integração com Google Directions e filtros (Fastest, Cheapest, Eco).
+        * **Planejamento de Rotas**: Integração com Google Directions.
         * **Paradas Próximas**: Busca geolocalizada de pontos de ônibus e estações.
         * **Previsões em Tempo Real**: Chegadas de ônibus via integração SPTrans Olho Vivo.
         * **Otimização**: Cache em Redis para resultados frequentes.
