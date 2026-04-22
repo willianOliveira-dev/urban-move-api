@@ -1,34 +1,41 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+import asyncio
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from src.modules.mobility.sptrans.worker import SPTransWorker
-import asyncio
+
 from src.core.config.env import env
 from src.core.db.database import close_db, close_redis, init_db, init_redis
 from src.modules.mobility.router import router as mobility_router
+from src.modules.mobility.sptrans.worker import SPTransWorker
 
 logging.basicConfig(
     level=getattr(logging, env.LOG_LEVEL.upper(), logging.INFO),
     format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
 )
-logger = logging.getLogger(__name__)
+logger = logging.getLogger("urbanmove.main")
 
 
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
-    logger.info("Starting database engine...")
+    """Gerenciamento do ciclo de vida da aplicação (DB, Redis, Background Workers)."""
+    logger.info("Initializing UrbanMove Backend Infrastructure...")
+    
     await init_db()
-    logger.info("Starting Redis...")
     await init_redis()
-    logger.info("Starting SPTrans background worker...")
+    
+    logger.info("Starting background services...")
     worker = SPTransWorker()
-    worker_task = asyncio.create_task(worker.start(position_interval=30, stops_interval_hours=24))
+    worker_task = asyncio.create_task(
+        worker.start(position_interval=30, stops_interval_hours=24)
+    )
+    
     yield
 
-    logger.info("Shutting down SPTrans background worker...")
+    logger.info("Graceful shutdown initiated...")
     worker.stop()
     worker_task.cancel()
     try:
@@ -36,20 +43,30 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     except asyncio.CancelledError:
         pass
 
-    logger.info("Shutting down Redis...")
     await close_redis()
-    logger.info("Shutting down database engine...")
     await close_db()
+    logger.info("Infrastructure shutdown complete.")
 
 
 def create_app() -> FastAPI:
+    """Configura e instancia a aplicação FastAPI."""
     fastapi = FastAPI(
-        title=env.APP_NAME,
-        version=env.APP_VERSION,
+        title="UrbanMove API",
+        description="""
+        Backend de Mobilidade Urbana Inteligente para a cidade de São Paulo.
+        
+        ### Funcionalidades:
+        * **Planejamento de Rotas**: Integração com Google Directions e filtros (Fastest, Cheapest, Eco).
+        * **Paradas Próximas**: Busca geolocalizada de pontos de ônibus e estações.
+        * **Previsões em Tempo Real**: Chegadas de ônibus via integração SPTrans Olho Vivo.
+        * **Otimização**: Cache em Redis para resultados frequentes.
+        """,
+        version="1.0.0",
         lifespan=lifespan,
-        docs_url="/docs" if env.DEBUG else None,
-        redoc_url="/redoc" if env.DEBUG else None,
+        docs_url="/docs",
+        redoc_url="/redoc",
     )
+
 
     fastapi.add_middleware(
         CORSMiddleware,
@@ -60,7 +77,8 @@ def create_app() -> FastAPI:
     )
     fastapi.add_middleware(GZipMiddleware, minimum_size=1000)
 
-    @fastapi.get("/health", tags=["Infra"])
+   
+    @fastapi.get("/health", tags=["Infra"], summary="Verifica saúde do sistema")
     async def health_check() -> dict[str, str]:
         return {
             "status": "healthy",
@@ -68,6 +86,7 @@ def create_app() -> FastAPI:
             "environment": env.ENVIRONMENT,
         }
 
+   
     fastapi.include_router(mobility_router)
 
     return fastapi
