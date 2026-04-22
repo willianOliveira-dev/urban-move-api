@@ -45,6 +45,11 @@ class Route(Base):
         nullable=True
     )
 
+    operator: Mapped[str | None] = mapped_column(
+        String(255),
+        nullable=True
+    )
+
     modal: Mapped[TransportModal] = mapped_column(
         Enum(TransportModal, native_enum=False, length=20),
         nullable=False,
