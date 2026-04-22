@@ -57,7 +57,7 @@ class Route(Base):
     )
 
     color: Mapped[str] = mapped_column(
-        String(6),
+        String(7),
         nullable=False,
         server_default="#0066CC"
     )

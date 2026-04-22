@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from fastapi import APIRouter, Depends, Query
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from src.core.db.database import get_db_session
+from src.core.db.database import get_db
 from src.modules.mobility.stops.controller import StopController
 from src.modules.mobility.stops.repository import StopRepository
 from src.modules.mobility.stops.schemas import StopResponse
@@ -13,7 +13,7 @@ from src.modules.mobility.stops.service import StopService
 router = APIRouter(prefix="/stops", tags=["Stops"])
 logger = logging.getLogger("urbanmove.mobility.stops")
 
-def get_stop_controller(session: AsyncSession = Depends(get_db_session)) -> StopController:
+def get_stop_controller(session: AsyncSession = Depends(get_db)) -> StopController:
     repository = StopRepository(session)
     service = StopService(repository)
     return StopController(service)

@@ -1,11 +1,11 @@
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-
+from src.modules.mobility.sptrans.worker import SPTransWorker
+import asyncio
 from src.core.config.env import env
 from src.core.db.database import close_db, close_redis, init_db, init_redis
 from src.modules.mobility.router import router as mobility_router
@@ -23,7 +23,19 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None]:
     await init_db()
     logger.info("Starting Redis...")
     await init_redis()
+    logger.info("Starting SPTrans background worker...")
+    worker = SPTransWorker()
+    worker_task = asyncio.create_task(worker.start(position_interval=30, stops_interval_hours=24))
     yield
+
+    logger.info("Shutting down SPTrans background worker...")
+    worker.stop()
+    worker_task.cancel()
+    try:
+        await worker_task
+    except asyncio.CancelledError:
+        pass
+
     logger.info("Shutting down Redis...")
     await close_redis()
     logger.info("Shutting down database engine...")

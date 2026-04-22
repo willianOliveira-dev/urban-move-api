@@ -1,9 +1,7 @@
 import logging
 from collections.abc import Sequence
-
 from fastapi import APIRouter, Depends, Query
-
-from src.core.db.database import get_db_session
+from src.core.db.database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.modules.mobility.routes.controller import RouteController
 from src.modules.mobility.routes.repository import RouteRepository
@@ -13,7 +11,7 @@ from src.modules.mobility.routes.service import RouteService
 router = APIRouter(prefix="/routes", tags=["Routes"])
 logger = logging.getLogger("urbanmove.mobility.routes")
 
-def get_route_controller(session: AsyncSession = Depends(get_db_session)) -> RouteController:
+def get_route_controller(session: AsyncSession = Depends(get_db)) -> RouteController:
     repository = RouteRepository(session)
     service = RouteService(repository)
     return RouteController(service)
