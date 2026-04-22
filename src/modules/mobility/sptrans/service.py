@@ -109,5 +109,29 @@ class SPTransClient:
         except httpx.HTTPError as e:
             raise SPTransClientError(f"Erro ao buscar paradas: {e}")
 
+    async def get_stop_predictions(self, external_stop_id: str) -> dict[str, object]:
+        """Busca previsões de chegada para uma parada específica."""
+        await self._ensure_auth()
+        try:
+            response = await self._client.get(
+                "/Previsao/Parada",
+                params={"codigoParada": external_stop_id},
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                self._is_authenticated = False
+                await self._ensure_auth()
+                return await self.get_stop_predictions(external_stop_id)
+            raise SPTransClientError(f"Erro ao buscar previsões: {e}")
+        except httpx.HTTPError as e:
+            raise SPTransClientError(f"Erro ao buscar previsões: {e}")
+
     async def close(self) -> None:
         await self._client.aclose()
+        self._client = httpx.AsyncClient(
+            base_url=env.SPTRANS_API_URL,
+            timeout=httpx.Timeout(10.0, connect=5.0),
+        )
+        self._is_authenticated = False

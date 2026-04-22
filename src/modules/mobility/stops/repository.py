@@ -1,33 +1,56 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from geoalchemy2 import Geometry
+from geoalchemy2.functions import ST_Distance, ST_DWithin, ST_X, ST_Y
+from sqlalchemy import Row, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import func
 
 from src.core.db.models.stop import Stop
 
+
 class StopRepository:
     def __init__(self, session: AsyncSession) -> None:
-        self.session = session
+        self._session = session
 
-    async def get_all_stops(self, limit: int = 100, offset: int = 0) -> Sequence[Stop]:
+    async def get_all(self, limit: int = 100, offset: int = 0) -> Sequence[Stop]:
         query = select(Stop).limit(limit).offset(offset)
-        result = await self.session.execute(query)
+        result = await self._session.execute(query)
         return result.scalars().all()
 
-    async def get_stops_nearby(self, lat: float, lng: float, radius_meters: float = 500.0, limit: int = 50) -> Sequence[Stop]:
-        # Using PostGIS ST_DWithin on geography type
-        # SRID 4326, ST_Point(lon, lat)
-        point = f"SRID=4326;POINT({lng} {lat})"
+    async def get_nearby(
+        self,
+        lat: float,
+        lng: float,
+        radius_meters: float = 500.0,
+        limit: int = 20,
+    ) -> Sequence[Row]:
+        ref_geog = func.ST_GeographyFromText(f"SRID=4326;POINT({lng} {lat})")
+        geom = cast(Stop.location, Geometry)
+
         query = (
-            select(Stop)
-            .where(func.ST_DWithin(Stop.location, func.ST_GeographyFromText(point), radius_meters))
+            select(
+                Stop.id,
+                Stop.external_id,
+                Stop.name,
+                Stop.modal,
+                Stop.is_accessible,
+                ST_Y(geom).label("lat"),
+                ST_X(geom).label("lng"),
+                ST_Distance(Stop.location, ref_geog).label("distance_meters"),
+            )
+            .where(ST_DWithin(Stop.location, ref_geog, radius_meters))
+            .order_by(ST_Distance(Stop.location, ref_geog))
             .limit(limit)
         )
-        result = await self.session.execute(query)
-        return result.scalars().all()
+        result = await self._session.execute(query)
+        return result.all()
 
-    async def get_stop_by_id(self, stop_id: str) -> Stop | None:
+    async def get_by_id(self, stop_id: str) -> Stop | None:
         query = select(Stop).where(Stop.id == stop_id)
-        result = await self.session.execute(query)
+        result = await self._session.execute(query)
+        return result.scalars().first()
+
+    async def get_by_external_id(self, external_id: str) -> Stop | None:
+        query = select(Stop).where(Stop.external_id == external_id)
+        result = await self._session.execute(query)
         return result.scalars().first()

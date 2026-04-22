@@ -2,9 +2,9 @@ import enum
 
 
 class TransportModal(str, enum.Enum):
-    BUS = "bus"
-    METRO = "metro"
-    TRAIN = "train"
+    BUS = "BUS"
+    METRO = "METRO"
+    TRAIN = "TRAIN"
 
     def __str__(self) -> str:
         return self.value

@@ -31,7 +31,6 @@ class SPTransWorker:
     """
 
     def __init__(self) -> None:
-        self.client = SPTransClient()
         self._is_running = False
         self._processed_stops: set[str] = set()
 
@@ -82,9 +81,10 @@ class SPTransWorker:
 
     async def _sync_positions(self) -> None:
         """Busca /Posicao e persiste rotas + veículos + posições via batch SQL."""
+        client = SPTransClient()
         try:
-            await self.client.authenticate()
-            response = await self.client._client.get("/Posicao")
+            await client.authenticate()
+            response = await client._client.get("/Posicao")
             response.raise_for_status()
             data = response.json()
 
@@ -163,7 +163,7 @@ class SPTransWorker:
         except Exception as e:
             logger.exception("Falha na sincronização de posições: %s", e)
         finally:
-            await self.client.close()
+            await client.close()
 
     async def _batch_upsert_routes(self, session: AsyncSession, rows: list[dict[str, object]]) -> None:
         """Upsert de rotas em lotes usando raw SQL para máxima performance."""
@@ -210,9 +210,10 @@ class SPTransWorker:
         self._processed_stops.clear()
         logger.info("Iniciando sincronização completa de paradas...")
 
+        client = SPTransClient()
         try:
-            await self.client.authenticate()
-            response = await self.client._client.get("/Posicao")
+            await client.authenticate()
+            response = await client._client.get("/Posicao")
             response.raise_for_status()
             data = response.json()
 
@@ -224,7 +225,7 @@ class SPTransWorker:
 
             for line in lines:
                 line_code = str(line.get("cl"))
-                new_rows = await self._fetch_stops_for_line(line_code)
+                new_rows = await self._fetch_stops_for_line(client, line_code)
                 stop_rows.extend(new_rows)
 
             if stop_rows:
@@ -237,13 +238,13 @@ class SPTransWorker:
         except Exception as e:
             logger.exception("Falha na sincronização de paradas: %s", e)
         finally:
-            await self.client.close()
+            await client.close()
 
-    async def _fetch_stops_for_line(self, line_code: str) -> list[dict[str, object]]:
+    async def _fetch_stops_for_line(self, client: SPTransClient, line_code: str) -> list[dict[str, object]]:
         """Busca paradas de uma linha via HTTP e retorna dicts prontos para batch insert."""
         rows: list[dict[str, object]] = []
         try:
-            res = await self.client._client.get(
+            res = await client._client.get(
                 "/Parada/BuscarParadasPorLinha",
                 params={"codigoLinha": line_code},
             )
